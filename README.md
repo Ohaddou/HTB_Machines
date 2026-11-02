@@ -24,5 +24,5 @@ The techniques documented here must never be used against systems without explic
 ---
 
 ## 👨‍💻 Author
-**(Ohaddou)**
+**Ohaddou**
 - [GitHub Profile](https://github.com/Ohaddou)
